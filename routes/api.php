@@ -28,6 +28,7 @@ Route::post('/verify', 'ApiController@verify')->name('/verify');
 Route::post('/simplesendpush', 'ApiController@simplesendpush')->name('/simplesendpush');
 
 Route::get('/getcategories', 'ApiController@getcategories')->name('/getcategories');
+Route::post('/getsubcategory', 'ApiController@getsubcategory')->name('/getsubcategory');
 Route::post('/filterproducts', 'ApiController@filterproducts')->name('/filterproducts');
 Route::post('/getprofile', 'ApiController@getprofile')->name('/getprofile');
 Route::post('/getreviews', 'ApiController@getreviews')->name('/getreviews');
@@ -35,10 +36,13 @@ Route::post('/getproducts', 'ApiController@getproducts')->name('/getproducts');
 Route::post('/togglefollow', 'ApiController@togglefollow')->name('/togglefollow');
 Route::post('/getfollow', 'ApiController@getfollow')->name('/getfollow');
 Route::post('/uploadFile', 'ApiController@uploadFile')->name('/uploadFile');
+Route::post('/editFile', 'ApiController@editFile')->name('/editFile');
 Route::post('/getpacctterms', 'ApiController@getpacctterms')->name('/getpacctterms');
 Route::post('/resetpassword', 'ApiController@resetpassword')->name('/resetpassword');
 Route::post('/updatefcmtoken', 'ApiController@updatefcmtoken')->name('/updatefcmtoken');
 Route::post('/getmyproducts', 'ApiController@getmyproducts')->name('/getmyproducts');
+Route::post('/getlocations', 'ApiController@getlocations')->name('/getlocations');
+
 
 Route::post('/getfriendprofile', 'ApiController@getfriendprofile')->name('/getfriendprofile');
 Route::post('/getchatinfo', 'ApiController@getchatinfo')->name('/getchatinfo');
@@ -62,6 +66,6 @@ Route::post('/readnoti', 'ApiController@readnoti')->name('/readnoti');
 Route::post('/getproreviews', 'ApiController@getproreviews')->name('/getproreviews');
 
 Route::post('/leavereview', 'ApiController@leavereview')->name('/leavereview');
-
+Route::post('/getparentcategory', 'ApiController@getparentcategory')->name('/getparentcategory');
 
 Route::post('/testSMS', 'ApiController@testSMS')->name('/testSMS');

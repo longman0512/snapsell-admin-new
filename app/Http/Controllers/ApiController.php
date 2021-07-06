@@ -167,19 +167,82 @@ class ApiController extends Controller
         return $temp;
     }
 
+    public function getsubcategory(Request $request){
+        $cat_id = $request->cat_id;
+        $RTL = $request->RTL;
+        if($RTL){
+            $query = "SELECT sCat_id AS `value`, sCat_name_en AS label FROM snap_category_sub WHERE sCat_parent_cat = ".$cat_id." ORDER BY sCat_name_en";
+        } else {
+            $query = "SELECT sCat_id AS `value`, sCat_name_ar AS label FROM snap_category_sub WHERE sCat_parent_cat = ".$cat_id." ORDER BY sCat_name_ar";
+        }
+        $result = DB::select($query);
+
+        return array(
+            "data" => $result
+        );
+    }
 
     public function filterproducts(Request $request){
 
-        $categories = json_decode($request->categories);
-        $query_category = "";
-        for($i = 0; $i < count($categories); $i++){
-            $query_category .= "cat_id = ".$categories[$i]." ";
-            if(($i + 1) < count($categories)){
-                $query_category .= "OR ";
+        $category_id = $request->category_id;
+        // $sub_categories = $request->subCategories ? $request->subCategories : array();
+        // $locations = $request->locations ? $request->locations : array();
+
+        $sub_categories = array();
+        $locations = array();
+
+        $RTL = $request->RTL;
+
+        $res_sub_categories = array();
+        if(!$category_id){
+            return [];            
+        }
+        
+        $get_subCat_query = '';
+        
+        if(!count($sub_categories)){
+            $get_subCat_query = "SELECT * FROM snap_category_sub WHERE sCat_parent_cat = ".$category_id.";";
+
+            $sub_categories_result = DB::select($get_subCat_query);
+            $sub_categories = array();
+
+            foreach($sub_categories_result as $sub_result){
+                $sub_categories[] = $sub_result->sCat_id;
+                $res_sub_categories[] = array(
+                    "value" => $sub_result->sCat_id,
+                    "label" => $RTL ? $sub_result->sCat_name_ar : $sub_result->sCat_name_en
+                );
             }
         }
-        $query = "SELECT * FROM (SELECT *, COUNT(pro_id) AS num FROM snap_product_cat WHERE ".$query_category." GROUP BY pro_id) t1 WHERE t1.num >=".$i."";
+
+        $query_category = "";
+        
+        for($i = 0; $i < count($sub_categories); $i++){
+
+            $query_category .= "cat_id = ".$sub_categories[$i]." ";
+            
+            if(($i + 1) < count($sub_categories)){
+                $query_category .= "OR ";
+            }
+
+        }
+
+        if($query_category){
+            $query = "SELECT * FROM (SELECT *, COUNT(pro_id) AS num FROM snap_product_cat WHERE ".$query_category." GROUP BY pro_id) t1 WHERE t1.num >=0";    
+        } else {
+            return array(
+                "sub_categories" => $res_sub_categories,
+
+                "categori_id" => gettype($category_id),
+                "locations" => $locations,
+                "sub" => $get_subCat_query,
+                "data" => array()
+            );
+        }
+        
+
         $results = DB::select($query);
+
         $products = array();
         foreach ($results as $pro) {
 
@@ -189,15 +252,20 @@ class ApiController extends Controller
             $temp = array();
 
             foreach($pro_category as $p_cat){
-                $category = Category::where('cat_id', $p_cat->cat_id)->get();
+                $category = DB::select("SELECT * FROM snap_category_sub WHERE sCat_id = ".$p_cat->cat_id);
+                // $category = Category::where('cat_id', $p_cat->cat_id)->get();
+
                 if(count($category)){
                     $temp[] = array(
-                        "cat_id" => $category[0]->cat_id,
-                        "cat_name_en" => $category[0]->cat_name_en,
-                        "cat_name_ar" => $category[0]->cat_name_ar
+                        "cat_id" => $category[0]->sCat_id,
+                        "cat_name_en" => $category[0]->sCat_name_en,
+                        "cat_name_ar" => $category[0]->sCat_name_ar
                     );
                 }
             }
+
+            $pro_reviews = DB::select("SELECT COUNT(*) AS num, AVG(rev_point) AS points FROM snap_reviews WHERE rev_to_proid = ".$pro->pro_id);
+
             if(count($pro_data))
             $products[] = array(
                 "pro_id"=> $pro_data[0]->pro_id,
@@ -205,6 +273,7 @@ class ApiController extends Controller
                 "pro_description"=> $pro_data[0]->pro_description,
                 "pro_location"=> $pro_data[0]->pro_location,
                 "pro_sub_location"=> $pro_data[0]->pro_sub_location,
+                "pro_location_id" => $pro_data[0]->pro_location_id,
                 "pro_price"=> $pro_data[0]->pro_price,
                 "pro_currency"=> $pro_data[0]->pro_currency,
                 "pro_currency_symbo"=> $pro_data[0]->pro_currency_symbo,
@@ -214,6 +283,8 @@ class ApiController extends Controller
                 "pro_customer_id"=> $pro_data[0]->pro_customer_id,
                 "created_at"=> $pro_data[0]->created_at,
                 "updated_at"=> $pro_data[0]->updated_at,
+                "pro_review_num" => count($pro_reviews) ? $pro_reviews[0]->num : 0,
+                "pro_review_point" => count($pro_reviews) ? $pro_reviews[0]->points: 0,
                 "pro_categories" => $temp
             );
         }
@@ -228,7 +299,23 @@ class ApiController extends Controller
             $products_results[] = $pro;
         }
 
-        return $products_results;
+        return array(
+            "sub_categories" => $res_sub_categories,
+
+            "categori_id" => gettype($category_id),
+            "locations" => $locations,
+            "sub" => $get_subCat_query,
+            "data" => $products_results
+        );
+
+        return gettype($categori_id);
+        // $categories = json_decode($request->categories);
+        
+        
+        
+        
+
+        
         
     }
 
@@ -339,6 +426,79 @@ class ApiController extends Controller
         }
     }
     
+    public function editFile(Request $request) {
+        if($request->filechanged){
+            $files = $request->file('file_attachment');
+            if(!$files)
+            {
+                return array(
+                    "status"=> 0,
+                    "msg"=>"Post is Failed",
+                    "data"=>'');
+            }
+            // $testPro = DB::select("SELECT * FROM snap_products WHERE pro_name = ".$request->pro_name);
+            // if(count($testPro)){
+            //  return array(
+            //         "status"=> 0,
+            //         "msg"=>"The same product name is already exist",
+            //         "data"=>'');   
+            // }
+            if($request->pro_media_type == 'image'){
+                $filename = "product".round(microtime(true) * 1000).".jpg";
+            } else {
+                $filename = "product".round(microtime(true) * 1000).".mp4";
+            }
+            request()->file_attachment->move(public_path('uploads/products/'), $filename);
+
+        }
+        if(isset($filename)){
+            DB::update('update snap_products set pro_name = ?,pro_description=?,pro_location=?,pro_location_id=?, pro_price=?, pro_currency=?, pro_currency_symbo=?, pro_media_type=?, pro_media_url=? where pro_id = ?',[
+                $request->pro_name,
+                $request->pro_description,
+                $request->pro_location,
+                $request->pro_location_id, 
+                $request->pro_price,
+                $request->pro_currency,
+                $request->pro_currency_symbol,
+                $request->pro_media_type,
+                $filename,
+                $request->pro_id,
+            ]);    
+        } else {
+            DB::update('update snap_products set pro_name = ?,pro_description=?,pro_location=?,pro_location_id=?, pro_price=?, pro_currency=?, pro_currency_symbo=? where pro_id = ?',[
+                $request->pro_name,
+                $request->pro_description,
+                $request->pro_location,
+                $request->pro_location_id, 
+                $request->pro_price,
+                $request->pro_currency,
+                $request->pro_currency_symbol,
+                $request->pro_id,
+            ]);    
+        }
+
+        $customer_name = DB::select("SELECT c_name FROM snap_customers WHERE c_id =".$request->pro_customer_id.";");
+        // return $customer_name;
+        if(count($customer_name))
+        $this->sendnotitofriend($request->pro_customer_id, 'Edit Product', $request->pro_prev_name." is edited by ".$customer_name[0]->c_name);        
+        // $this->addFavoritLocation($request->pro_customer_id, $request->pro_location_id);
+
+        DB::delete('delete from snap_product_cat where pro_id = ?',[$request->pro_id]);
+        $categories = json_decode($request->pro_subcategories);
+        foreach($categories as $category){
+            DB::table('snap_product_cat')->insertGetId([
+                "cat_id"=>$category,
+                "pro_id"=>$request->pro_id
+            ]);
+        }
+
+        return array(
+            "flag"=> 1,
+            "msg"=> "Success",
+            "data"=>''
+        );
+    }
+
     public function uploadFile(Request $request){
         $files = $request->file('file_attachment');
         if(!$files)
@@ -367,6 +527,7 @@ class ApiController extends Controller
                 'pro_name'=> $request->pro_name,
                 'pro_description'=>$request->pro_description,
                 'pro_location'=>$request->pro_location,
+                'pro_location_id'=>$request->pro_location_id,
                 'pro_price'=>$request->pro_price,
                 'pro_currency'=>$request->pro_currency,
                 'pro_currency_symbo'=>$request->pro_currency_symbol,
@@ -375,13 +536,14 @@ class ApiController extends Controller
                 'pro_customer_id'=>$request->pro_customer_id,
                 'pro_location_id'=>$request->pro_location_id,
             ]);
+
         $customer_name = DB::select("SELECT c_name FROM snap_customers WHERE c_id =".$request->pro_customer_id.";");
         // return $customer_name;
         if(count($customer_name))
         $this->sendnotitofriend($request->pro_customer_id, 'New post', $request->pro_name." is posted by ".$customer_name[0]->c_name);        
         $this->addFavoritLocation($request->pro_customer_id, $request->pro_location_id);
 
-        $categories = json_decode($request->pro_categories);
+        $categories = json_decode($request->pro_subcategories);
         foreach($categories as $category){
             DB::table('snap_product_cat')->insertGetId([
                 "cat_id"=>$category,
@@ -882,5 +1044,39 @@ class ApiController extends Controller
             "flag" => 1,
             "msg" => "Left review successfully"
         );
+    }
+
+    public function getlocations(Request $request) {
+        if($request->RTL)
+        $query = "SELECT l_id AS `value`, CONCAT(l_area_ar, ', ', l_ios2_country_code) AS label FROM snap_locations;";
+
+        $query = "SELECT l_id AS `value`, CONCAT(l_area_en, ', ', l_ios2_country_code) AS label FROM snap_locations;";
+
+        $result = DB::select($query);
+
+        return $result;
+    }
+
+    public function getparentcategory(Request $request){
+        $category = DB::select("SELECT t1.pro_id, t1.cat_id, snap_category_sub.sCat_parent_cat FROM (SELECT * FROM snap_product_cat WHERE pro_id = ".$request->pro_id.") AS t1 LEFT JOIN snap_category_sub ON t1.cat_id = snap_category_sub.sCat_id");
+        
+        if(count($category)){
+            $temp = array();
+
+            foreach($category as $cat){
+                $temp[] = $cat->cat_id;
+            }
+            return array(
+                "flag" => 1,
+                "sub_id"=>$temp,
+                "cat_id"=>$category[0]->sCat_parent_cat
+            );
+        } else {
+            return array(
+                "flag" => 0,
+                "sub_id"=>'',
+                "cat_id"=>''
+            );
+        }
     }
 }
